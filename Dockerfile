@@ -5,14 +5,11 @@ WORKDIR /app
 # Install build tools for native modules
 RUN apk add --no-cache python3 make g++ git
 
-# Copy package files
-COPY package.json ./
+# Copy all source files first
+COPY . .
 
 # Install dependencies
 RUN npm install --production=false
-
-# Copy source code
-COPY . .
 
 # Build TypeScript
 RUN npm run build
