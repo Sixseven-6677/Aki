@@ -1,0 +1,6 @@
+{
+  "autoUpdate": false,
+  "mqtt": {
+    "enabled": true
+  }
+}

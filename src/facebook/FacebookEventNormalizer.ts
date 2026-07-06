@@ -1,0 +1,101 @@
+import { MessagingEntry } from "../types";
+import {
+  FBEvent,
+  FBMessageEvent,
+  FBPostbackEvent,
+  FBMemberJoinedEvent,
+  FBMemberLeftEvent,
+  FBNameChangedEvent,
+  FBNicknameChangedEvent,
+  FBUnknownEvent,
+  FBAttachment,
+} from "./types/events";
+
+export class FacebookEventNormalizer {
+  normalize(entry: MessagingEntry): FBEvent {
+    const base = {
+      senderId:    entry.sender.id,
+      senderFbId:  entry.senderFbId,
+      pageId:      entry.recipient.id,
+      timestamp:   entry.timestamp,
+    };
+
+    if (entry.postback) {
+      const event: FBPostbackEvent = {
+        ...base,
+        type:    "postback",
+        payload: entry.postback.payload,
+        title:   entry.postback.title,
+      };
+      return event;
+    }
+
+    if (entry.thread_action === "added_participants") {
+      const event: FBMemberJoinedEvent = {
+        ...base,
+        type:          "member_joined",
+        addedByUserId: entry.sender.id,
+        members:       (entry.added_participants ?? []).map((p) => p.id),
+      };
+      return event;
+    }
+
+    if (entry.thread_action === "removed_participants") {
+      const event: FBMemberLeftEvent = {
+        ...base,
+        type:    "member_left",
+        members: (entry.removed_participants ?? []).map((p) => p.id),
+      };
+      return event;
+    }
+
+    if (entry.thread_action === "name_changed" && entry.name_change) {
+      const event: FBNameChangedEvent = {
+        ...base,
+        type:      "name_changed",
+        threadId:  entry.sender.id,
+        newName:   entry.name_change.newName,
+        changedBy: entry.name_change.changedBy,
+      };
+      return event;
+    }
+
+    if (entry.thread_action === "nickname_changed" && entry.nickname_change) {
+      const event: FBNicknameChangedEvent = {
+        ...base,
+        type:          "nickname_changed",
+        threadId:      entry.sender.id,
+        participantId: entry.nickname_change.participantId,
+        newNickname:   entry.nickname_change.newNickname,
+        changedBy:     entry.nickname_change.changedBy,
+      };
+      return event;
+    }
+
+    if (entry.message) {
+      const attachments: FBAttachment[] = (
+        entry.message.attachments ?? []
+      ).map((att) => ({
+        type:        att.type,
+        url:         att.payload.url,
+        coordinates: att.payload.coordinates,
+      }));
+
+      const event: FBMessageEvent = {
+        ...base,
+        type:        "message",
+        messageId:   entry.message.mid,
+        text:        entry.message.text,
+        attachments,
+      };
+      return event;
+    }
+
+    const unknown: FBUnknownEvent = { ...base, type: "unknown" };
+    return unknown;
+  }
+
+  normalizeMany(entries: MessagingEntry[]): FBEvent[] {
+    return entries.map((e) => this.normalize(e));
+  }
+}
