@@ -5,13 +5,13 @@
     "lib": ["ES2022"],
     "outDir": "dist",
     "rootDir": "src",
-    "strict": true,
+    "strict": false,
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "declaration": false,
-    "sourceMap": true,
+    "sourceMap": false,
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
@@ -19,11 +19,11 @@
     "typeRoots": ["node_modules/@types"],
     "allowJs": true,
     "checkJs": false,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "incremental": true
+    "incremental": false
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "imported"]

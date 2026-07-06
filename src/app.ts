@@ -9,7 +9,7 @@ import { AkiTransport }            from "./facebook/AkiTransport";
 export function createApp(
   gateway: FacebookGateway,
   groupHandlers: GroupHandlers = {},
-  miraiTransport: MiraiTransport | null = null,
+  miraiTransport: AkiTransport | null = null,
 ): Application {
   const app = express();
 
