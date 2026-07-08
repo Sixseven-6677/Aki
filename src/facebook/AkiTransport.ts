@@ -258,36 +258,29 @@ export class AkiTransport implements ISystem {
 
     log.info(`[${this.name}]: starting MQTT listener…`);
     this.listenerStartMs = Date.now();
-    const capturedGen    = this.listenerGeneration;
     diagnosticMonitor.recordMqttConnect(this.name);
 
-    this.stopListenFn = this.api.listen((err, event) => {
-      if (capturedGen !== this.listenerGeneration) return;
-
-      if (err) {
-        const stableMs = Date.now() - this.listenerStartMs;
-        const errCode  = (err as unknown as Record<string, unknown>)["error"] as number | undefined;
-        const errMsg   = err.message ?? JSON.stringify(err);
-
-        this.api = null;
-        this.stopListening();
-        diagnosticMonitor.recordMqttDisconnect(this.name, { errorCode: errCode, errorMsg: errMsg, stableMs });
-        log.warn(`[${this.name}]: MQTT error — scheduling re-login.`, { error: errMsg, stableMs });
-
-        if (errCode !== undefined && FATAL_ERRORS.has(errCode) && this.loginAttempts >= 2) {
-          log.error(`[${this.name}]: fatal FB error ${errCode} persists — stopping. [permanent-failure]`);
-          this.running = false;
-          this.onPermFailure?.(`fatal-fb-error-${errCode}`);
-          return;
-        }
-
-        if (stableMs >= STABLE_MS) this.loginAttempts = 0;
-        this.scheduleReLogin("listen-error");
+    const handleError = (err: Error) => {
+      if (!this.running) return;
+      const stableMs = Date.now() - this.listenerStartMs;
+      const errCode  = (err as unknown as Record<string, unknown>)["error"] as number | undefined;
+      const errMsg   = err?.message ?? JSON.stringify(err);
+      this.api = null;
+      this.stopListening();
+      diagnosticMonitor.recordMqttDisconnect(this.name, { errorCode: errCode, errorMsg: errMsg, stableMs });
+      log.warn(`[${this.name}]: MQTT error — scheduling re-login.`, { error: errMsg, stableMs });
+      if (errCode !== undefined && FATAL_ERRORS.has(errCode) && this.loginAttempts >= 2) {
+        log.error(`[${this.name}]: fatal FB error ${errCode} persists — stopping. [permanent-failure]`);
+        this.running = false;
+        this.onPermFailure?.(`fatal-fb-error-${errCode}`);
         return;
       }
+      if (stableMs >= STABLE_MS) this.loginAttempts = 0;
+      this.scheduleReLogin("listen-error");
+    };
 
+    const handleEvent = (event: unknown) => {
       if (!this.running || !event) return;
-
       global.lastMqttActivity = Date.now();
 
       const evType = (event as Record<string, unknown>)["type"] as string | undefined;
@@ -297,7 +290,7 @@ export class AkiTransport implements ISystem {
       if (msgId) {
         if (this.seenMsgIds.includes(msgId)) {
           log.debug(`[${this.name}]: dedup drop — ${msgId}.`);
-          return; // بدون زيادة listenerGeneration — كان يقتل كل الأحداث اللاحقة
+          return;
         }
         this.seenMsgIds.push(msgId);
         if (this.seenMsgIds.length > 5) this.seenMsgIds.shift();
@@ -306,15 +299,45 @@ export class AkiTransport implements ISystem {
       for (const fn of this.rawListeners) {
         try { fn(event); } catch { /* ignore */ }
       }
-
       try { this.eventHandler?.(event); } catch (handlerErr: unknown) {
         log.error(`[${this.name}]: event handler threw.`, {
           error: handlerErr instanceof Error ? handlerErr.message : String(handlerErr),
         });
       }
+    };
+
+    // Support both v3 (callback returns stop-fn) and v4 (returns MessageEmitter with stopListening())
+    const listenResult = this.api.listen((err: Error | null, event: unknown) => {
+      if (err) { handleError(err); return; }
+      handleEvent(event);
     });
 
-    log.info(`[${this.name}]: MQTT listener active (gen=${capturedGen}). [listener-active]`);
+    // v4: listenResult is a MessageEmitter — also wire EventEmitter events as fallback
+    if (listenResult && typeof (listenResult as Record<string, unknown>).on === "function") {
+      const emitter = listenResult as unknown as {
+        on(ev: string, fn: (e: unknown) => void): void;
+        stopListening?(cb?: () => void): void;
+      };
+      const emitTypes = ["message", "message_reply", "event", "typ", "read", "read_receipt"];
+      emitTypes.forEach(evName => {
+        emitter.on(evName, (e: unknown) => handleEvent(e));
+      });
+      emitter.on("error", (e: unknown) => handleError(e as Error));
+      log.info(`[${this.name}]: v4 EventEmitter listeners attached.`);
+
+      this.stopListenFn = () => {
+        if (typeof emitter.stopListening === "function") {
+          try { emitter.stopListening(() => {}); } catch { /* ignore */ }
+        }
+      };
+    } else if (typeof listenResult === "function") {
+      // v3: returns stop function directly
+      this.stopListenFn = listenResult as () => void;
+    } else {
+      this.stopListenFn = null;
+    }
+
+    log.info(`[${this.name}]: MQTT listener active. [listener-active]`);
   }
 
   private stopListening(): void {
