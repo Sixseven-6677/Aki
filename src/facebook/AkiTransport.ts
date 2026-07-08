@@ -290,12 +290,14 @@ export class AkiTransport implements ISystem {
 
       global.lastMqttActivity = Date.now();
 
+      const evType = (event as Record<string, unknown>)["type"] as string | undefined;
+      log.info(`[${this.name}]: raw FCA event received.`, { type: evType });
+
       const msgId = (event as Record<string, unknown>)["messageID"] as string | undefined;
       if (msgId) {
         if (this.seenMsgIds.includes(msgId)) {
-          log.debug(`[${this.name}]: dedup drop (storage5Message) — ${msgId}.`);
-          if (capturedGen === this.listenerGeneration) this.listenerGeneration++;
-          return;
+          log.debug(`[${this.name}]: dedup drop — ${msgId}.`);
+          return; // بدون زيادة listenerGeneration — كان يقتل كل الأحداث اللاحقة
         }
         this.seenMsgIds.push(msgId);
         if (this.seenMsgIds.length > 5) this.seenMsgIds.shift();
