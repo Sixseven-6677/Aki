@@ -11,8 +11,8 @@ COPY . .
 # Install dependencies
 RUN npm install --production=false
 
-# Build TypeScript
-RUN npm run build
+# Build TypeScript only if dist/ not already present (pre-built takes priority)
+RUN [ -d "dist" ] && echo "Using pre-built dist/" || npm run build
 
 # Remove dev dependencies
 RUN npm prune --production

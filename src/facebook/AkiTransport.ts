@@ -297,9 +297,9 @@ export class AkiTransport implements ISystem {
       }
 
       for (const fn of this.rawListeners) {
-        try { fn(event); } catch { /* ignore */ }
+        try { fn(event as FcaEvent); } catch { /* ignore */ }
       }
-      try { this.eventHandler?.(event); } catch (handlerErr: unknown) {
+      try { this.eventHandler?.(event as FcaEvent); } catch (handlerErr: unknown) {
         log.error(`[${this.name}]: event handler threw.`, {
           error: handlerErr instanceof Error ? handlerErr.message : String(handlerErr),
         });
@@ -313,7 +313,7 @@ export class AkiTransport implements ISystem {
     });
 
     // v4: listenResult is a MessageEmitter — also wire EventEmitter events as fallback
-    if (listenResult && typeof (listenResult as Record<string, unknown>).on === "function") {
+    if (listenResult && typeof (listenResult as unknown as Record<string, unknown>).on === "function") {
       const emitter = listenResult as unknown as {
         on(ev: string, fn: (e: unknown) => void): void;
         stopListening?(cb?: () => void): void;

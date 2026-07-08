@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.logger = exports.LOG_LEVEL_PRIORITY = exports.FileTransport = exports.ConsoleTransport = exports.LoggerManager = exports.Logger = void 0;
+var Logger_1 = require("./Logger");
+Object.defineProperty(exports, "Logger", { enumerable: true, get: function () { return Logger_1.Logger; } });
+var LoggerManager_1 = require("./LoggerManager");
+Object.defineProperty(exports, "LoggerManager", { enumerable: true, get: function () { return LoggerManager_1.LoggerManager; } });
+var ConsoleTransport_1 = require("./transports/ConsoleTransport");
+Object.defineProperty(exports, "ConsoleTransport", { enumerable: true, get: function () { return ConsoleTransport_1.ConsoleTransport; } });
+var FileTransport_1 = require("./transports/FileTransport");
+Object.defineProperty(exports, "FileTransport", { enumerable: true, get: function () { return FileTransport_1.FileTransport; } });
+var ILogger_1 = require("./types/ILogger");
+Object.defineProperty(exports, "LOG_LEVEL_PRIORITY", { enumerable: true, get: function () { return ILogger_1.LOG_LEVEL_PRIORITY; } });
+const LoggerManager_2 = require("./LoggerManager");
+exports.logger = LoggerManager_2.LoggerManager.getLogger();

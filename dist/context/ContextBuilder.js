@@ -1,0 +1,149 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ContextBuilder = void 0;
+const Context_1 = require("./Context");
+const LoggerManager_1 = require("../logger/LoggerManager");
+const log = LoggerManager_1.LoggerManager.getLogger("ContextBuilder");
+/** Fallback user used when UserService is unavailable or throws. */
+const FALLBACK_USER = (id) => ({
+    id,
+    role: "user",
+    messageCount: 0,
+    lastSeen: new Date(),
+    createdAt: new Date(),
+    preferences: {},
+    isNew: false,
+});
+class ContextBuilder {
+    sender;
+    ownerIds;
+    adminStore;
+    userService;
+    /**
+     * @param sender      The ISender used to reply to messages.
+     * @param ownerIds    User IDs that always get role "owner". Required at
+     *                    construction time so no message is ever processed without
+     *                    the correct owner list.
+     * @param adminStore  Live AdminStore reference. Required at construction time
+     *                    so ctx.hasRole("admin") always reflects dynamic admins.
+     * @param userService Optional UserService — can be injected later via
+     *                    setUserService() if the service is not available yet
+     *                    when the gateway is constructed.
+     */
+    constructor(sender, ownerIds, adminStore, userService) {
+        this.sender = sender;
+        this.ownerIds = new Set(ownerIds);
+        this.adminStore = adminStore;
+        this.userService = userService;
+        log.info(`ContextBuilder: created with ${ownerIds.length} owner(s).`);
+    }
+    /** Inject (or replace) the UserService after construction. */
+    setUserService(svc) {
+        this.userService = svc;
+    }
+    /**
+     * Builds a Context asynchronously.
+     *
+     * thread.id  = event.senderId  (threadID in FCA — correct reply routing)
+     * user lookup = event.senderFbId ?? event.senderId
+     *   In group chats (FCA), senderFbId is the real Facebook user ID while
+     *   senderId carries the threadID for routing. In DMs they are the same.
+     */
+    async build(event) {
+        const buildStart = Date.now();
+        const thread = { id: event.senderId, pageId: event.pageId };
+        const message = this.buildMessage(event);
+        const userLookupId = event.senderFbId ?? event.senderId;
+        log.debug("Building context.", {
+            threadId: event.senderId,
+            userLookupId,
+            eventType: event.type,
+            hasUserService: Boolean(this.userService),
+        });
+        // ── User resolution ───────────────────────────────────────────────────
+        let user = FALLBACK_USER(userLookupId);
+        let source = "fallback";
+        if (this.userService) {
+            try {
+                log.debug("UserService.findOrCreate — start.", { fbId: userLookupId });
+                const t0 = Date.now();
+                const record = await this.userService.findOrCreate(userLookupId);
+                const lookupMs = Date.now() - t0;
+                user = {
+                    id: record.fbId,
+                    name: record.name,
+                    role: record.role,
+                    messageCount: record.messageCount,
+                    lastSeen: record.lastSeenAt,
+                    createdAt: record.createdAt,
+                    preferences: record.preferences,
+                    isNew: record.isNew,
+                };
+                source = "db";
+                log.debug("UserService.findOrCreate — done.", {
+                    fbId: userLookupId,
+                    role: user.role,
+                    isNew: user.isNew,
+                    messageCount: user.messageCount,
+                    lookupMs,
+                });
+            }
+            catch (err) {
+                source = "fallback";
+                log.warn("UserService lookup failed — using fallback user.", {
+                    fbId: userLookupId,
+                    error: err instanceof Error ? err.message : String(err),
+                });
+            }
+        }
+        else {
+            log.debug("No UserService injected — using fallback user.", { fbId: userLookupId });
+        }
+        // ── Owner override ────────────────────────────────────────────────────
+        if (this.ownerIds.has(userLookupId)) {
+            log.debug(`ContextBuilder: user ${userLookupId} in ownerIds — elevating to owner.`);
+            user = { ...user, role: "owner" };
+        }
+        // ── Admin store override ──────────────────────────────────────────────
+        if (this.adminStore.has(userLookupId) &&
+            user.role !== "owner" &&
+            user.role !== "admin") {
+            log.debug(`ContextBuilder: user ${userLookupId} in AdminStore — elevating to admin.`);
+            user = { ...user, role: "admin" };
+        }
+        const totalMs = Date.now() - buildStart;
+        log.debug("Context ready.", {
+            threadId: event.senderId,
+            userId: user.id,
+            role: user.role,
+            source,
+            totalMs,
+        });
+        return new Context_1.Context(user, thread, message, this.sender);
+    }
+    buildMessage(event) {
+        if (event.type === "postback") {
+            return {
+                id: `postback-${event.timestamp}`,
+                text: event.payload,
+                attachments: [],
+                timestamp: event.timestamp,
+                isPostback: true,
+                postbackPayload: event.payload,
+            };
+        }
+        const attachments = event.attachments.map((att) => ({
+            type: att.type,
+            url: att.url,
+            coordinates: att.coordinates,
+        }));
+        return {
+            id: event.messageId,
+            text: event.text,
+            attachments,
+            timestamp: event.timestamp,
+            isPostback: false,
+        };
+    }
+}
+exports.ContextBuilder = ContextBuilder;
