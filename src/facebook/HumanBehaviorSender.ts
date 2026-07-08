@@ -33,9 +33,9 @@ export class HumanBehaviorSender implements ISender {
   private static calculateDelay(text: string): number {
     const bell = Math.random() + Math.random();
     const len  = text.length;
-    if (len < 80)  return 600  + bell * 500;
-    if (len < 250) return 1200 + bell * 700;
-    return               1800 + bell * 1100;
+    if (len < 80)  return 200 + bell * 200;
+    if (len < 250) return 400 + bell * 300;
+    return               600 + bell * 400;
   }
 
   private static sleep(ms: number): Promise<void> {
