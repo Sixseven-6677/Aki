@@ -178,12 +178,12 @@ export class AkiTransport implements ISystem {
 
       /* eslint-disable @typescript-eslint/no-var-requires */
       const DjamelFCA = require(path.resolve(process.cwd(), "fca")) as (
-        opts:     { appState: FcaCookie[] },
+        cookieInput: FcaCookie[],
         callback: (err: Error | null, api: FcaApi | null, extras?: { appState?: FcaCookie[] }) => void,
       ) => void;
       /* eslint-enable @typescript-eslint/no-var-requires */
 
-      DjamelFCA({ appState: stateToUse }, (err, api, extras) => {
+      DjamelFCA(stateToUse, (err, api, extras) => {
         if (resolved) return;
 
         if (err || !api) {
