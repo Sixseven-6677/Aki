@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@dongdev/fca-unofficial": "^4.0.3",
+    "tough-cookie": "^4.1.4",
+    "axios-cookiejar-support": "^5.0.5",
     "axios": "^1.9.0",
     "chokidar": "^3.6.0",
     "dotenv": "^16.6.0",
