@@ -77,6 +77,7 @@ export class AkiTransport implements ISystem {
 
   private listenerGeneration = 0;
   private readonly seenMsgIds: string[] = [];
+  private readonly rawListeners = new Set<(e: unknown) => void>();
 
   constructor(
     rawAppState: FcaCookie[],
@@ -96,6 +97,10 @@ export class AkiTransport implements ISystem {
   }
 
   setEventHandler(fn: AkiEventHandler): void    { this.eventHandler      = fn; }
+
+  addRawEventListener(fn: (e: unknown) => void): void    { this.rawListeners.add(fn); }
+  removeRawEventListener(fn: (e: unknown) => void): void { this.rawListeners.delete(fn); }
+
   setOnPermanentFailure(fn: (r: string) => void): void { this.onPermFailure = fn; }
   setOnAppStateRefresh(fn: (c: FcaCookie[]) => void): void { this.onAppStateRefresh = fn; }
 
@@ -294,6 +299,10 @@ export class AkiTransport implements ISystem {
         }
         this.seenMsgIds.push(msgId);
         if (this.seenMsgIds.length > 5) this.seenMsgIds.shift();
+      }
+
+      for (const fn of this.rawListeners) {
+        try { fn(event); } catch { /* ignore */ }
       }
 
       try { this.eventHandler?.(event); } catch (handlerErr: unknown) {
