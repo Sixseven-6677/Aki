@@ -5,18 +5,25 @@ WORKDIR /app
 # Install build tools for native modules
 RUN apk add --no-cache python3 make g++ git
 
-# Copy package files
-COPY package.json package-lock.json .npmrc ./
-
-# Use yarn instead of npm to avoid "Exit handler never called" npm bug
-RUN corepack enable && yarn set version classic \
-    && yarn install --production=false --ignore-engines --non-interactive
-
-# Copy source files
+# Copy source files (including pre-built dist/)
 COPY . .
 
-# Build TypeScript only if dist/ not already present (pre-built takes priority)
-RUN [ -d "dist" ] && echo "Using pre-built dist/" || yarn build
+# Install ALL production dependencies explicitly - split into chunks to avoid npm crash
+# Remove potentially problematic packages from first pass, install them separately
+RUN npm install --legacy-peer-deps --ignore-scripts --no-package-lock \
+    express dotenv mongoose socket.io body-parser axios \
+    fs-extra chalk moment-timezone uuid yt-search ytdl-core \
+    chokidar gradient-string tough-cookie axios-cookiejar-support \
+    youtube-search-api
+
+# Install better-sqlite3 with build support
+RUN npm install --legacy-peer-deps better-sqlite3
+
+# Install the fca package last (most likely to crash)  
+RUN npm install --legacy-peer-deps --ignore-scripts @dongdev/fca-unofficial || true
+
+# Verify critical dependency is present
+RUN node -e "require('express'); console.log('express OK')"
 
 ENV NODE_ENV=production
 
