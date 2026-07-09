@@ -1,8 +1,8 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════════╗
- * ║       DJAMEL-FCA v3.0 — Facebook Client Abstractions               ║
+ * ║       DJAMEL-FCA v4.0 — Facebook Client Abstractions               ║
  * ║       Copyright © 2025 DJAMEL — All rights reserved               ║
- * ║       Built exclusively for DAVID V1 Bot Engine                    ║
+ * ║       Powered by ws3-fca (ntkhang03) — replaces dongdev            ║
  * ╚══════════════════════════════════════════════════════════════════════╝
  *
  * Features:
@@ -20,7 +20,7 @@
  */
 "use strict";
 
-const loginFCA = require("@dongdev/fca-unofficial");
+const loginFCA = require("ws3-fca");
 const axios    = require("axios");
 
 // ─── User-Agent Pool ──────────────────────────────────────────────────────────
@@ -243,8 +243,64 @@ function login(cookieInput, opts, callback) {
     let freshState = appState;
     try { freshState = dedup(api.getAppState() || []); } catch (_) {}
 
+
+    // ── Periodic AppState Refresh ─────────────────────────────────────────────
+    // Every 20 minutes: harvest the latest cookies from ws3-fca and write
+    // them back to the Railway environment variable.  If the timer fires after
+    // the process is about to exit, unref() ensures Node won't be kept alive.
+    const _stateTimer = setInterval(async () => {
+      try {
+        const latest = dedup(api.getAppState() || []);
+        if (latest.length > 0) await saveStateToRailway(latest);
+      } catch (_) {}
+    }, 20 * 60 * 1000);
+    if (_stateTimer.unref) _stateTimer.unref();
+
     callback(null, api, { appState: freshState, ua: UA, calcTypingDelay, simulateTyping });
   });
+}
+
+// ─── Railway AppState Self-Heal ─────────────────────────────────────────────
+// Periodically persists the latest cookies back to Railway so the next
+// redeploy always starts with a fresh session — zero manual intervention.
+// Requires RAILWAY_SELF_TOKEN + RAILWAY_PROJECT_ID + RAILWAY_ENV_ID +
+// RAILWAY_SERVICE_ID to be set as environment variables on the service.
+
+async function saveStateToRailway(freshCookies) {
+  const token     = process.env.RAILWAY_SELF_TOKEN;
+  const projectId = process.env.RAILWAY_PROJECT_ID;
+  const envId     = process.env.RAILWAY_ENV_ID;
+  const serviceId = process.env.RAILWAY_SERVICE_ID;
+  if (!token || !projectId || !envId || !serviceId) return; // not configured — skip silently
+
+  try {
+    await axios.post(
+      "https://backboard.railway.app/graphql/v2",
+      {
+        query: `mutation VariableUpsert($input: VariableUpsertInput!) {
+          variableUpsert(input: $input)
+        }`,
+        variables: {
+          input: {
+            projectId,
+            environmentId: envId,
+            serviceId,
+            name:  "FB_APPSTATE",
+            value: JSON.stringify(freshCookies),
+          },
+        },
+      },
+      {
+        headers: {
+          Authorization:  `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 10000,
+      }
+    );
+  } catch (_) {
+    // Non-critical — swallow errors so they never crash the bot
+  }
 }
 
 // ─── Exports ─────────────────────────────────────────────────────────────────
@@ -262,5 +318,5 @@ module.exports.calcTypingDelay    = calcTypingDelay;
 module.exports.simulateTyping     = simulateTyping;
 module.exports.buildReplyHelper   = buildReplyHelper;
 module.exports.getThreadInfo      = getThreadInfo;
-module.exports.version            = "3.0.0";
+module.exports.version            = "4.0.0";
 module.exports.author             = "DJAMEL";
