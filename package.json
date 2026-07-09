@@ -12,7 +12,6 @@
     "test": "jest --config jest.config.js"
   },
   "dependencies": {
-    "ws3-fca": "github:ntkhang03/ws3-fca",
     "tough-cookie": "^4.1.4",
     "axios-cookiejar-support": "^5.0.5",
     "axios": "^1.9.0",
