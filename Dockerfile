@@ -5,23 +5,18 @@ WORKDIR /app
 # Install build tools for native modules
 RUN apk add --no-cache python3 make g++ git
 
-# Upgrade npm
-RUN npm install -g npm@10.8.2
-
-# Copy package files first for better layer caching
+# Copy package files
 COPY package.json package-lock.json .npmrc ./
 
-# Install dependencies with --ignore-scripts to avoid postinstall crashes
-# then explicitly rebuild native modules
-RUN npm install --legacy-peer-deps --ignore-scripts \
-    && npm rebuild better-sqlite3 \
-    && echo "Dependencies installed successfully"
+# Use yarn instead of npm to avoid "Exit handler never called" npm bug
+RUN corepack enable && yarn set version classic \
+    && yarn install --production=false --ignore-engines --non-interactive
 
-# Copy the rest of source files
+# Copy source files
 COPY . .
 
 # Build TypeScript only if dist/ not already present (pre-built takes priority)
-RUN [ -d "dist" ] && echo "Using pre-built dist/" || npm run build
+RUN [ -d "dist" ] && echo "Using pre-built dist/" || yarn build
 
 ENV NODE_ENV=production
 
