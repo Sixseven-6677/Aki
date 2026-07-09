@@ -524,7 +524,14 @@ export class AkiTransport implements ISystem {
 
     // ── معالج الخطأ ──────────────────────────────────────────────────────
     const handleError = (err: Error): void => {
-      if (this.state === TransportState.STOPPING || this.state === TransportState.STOPPED) return;
+      // نتجاهل الأخطاء المتكررة إذا بدأنا بالفعل إعادة الاتصال أو destroy.
+      // بدون هذا الحارس، أحداث error متعددة (error storm) تُشغّل connectLoop
+      // متعددة بالتوازي وتُضخّم attempts بشكل خاطئ.
+      if (
+        this.state === TransportState.RECONNECTING ||
+        this.state === TransportState.STOPPING     ||
+        this.state === TransportState.STOPPED
+      ) return;
 
       const stableMs = Date.now() - listenStartMs;
       const errCode  = (err as unknown as Record<string, unknown>)["error"] as number | undefined;
