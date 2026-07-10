@@ -226,6 +226,13 @@ function login(cookieInput, opts, callback) {
     api.setOptions({ listenEvents: true, selfListen: false, autoReconnect: false, userAgent: UA });
     api.getUID = () => api.getCurrentUserID();
 
+    // ── ws3-fca compatibility shim ────────────────────────────────────────────
+    // ws3-fca exposes api.listenMqtt instead of api.listen.
+    // AkiTransport calls api.listen(callback) — this bridges the two.
+    if (typeof api.listenMqtt === "function" && typeof api.listen !== "function") {
+      api.listen = (callback) => api.listenMqtt(callback);
+    }
+
     // Human send
     api.sendMessageHuman = async (msg, tid, cb) => {
       const delay = calcTypingDelay(typeof msg === "string" ? msg : msg?.body || "");
