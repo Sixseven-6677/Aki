@@ -258,6 +258,28 @@ function login(cookieInput, opts, callback) {
       return _rawSendMessage(msg, threadID, callback, replyToMessage);
     };
 
+    // ── getThreadInfo callback-compatibility shim ─────────────────────────────
+    // ws3-fca 3.5.x's real getThreadInfo(threadID) is Promise-based ONLY — it
+    // has no callback parameter at all (unlike sendMessage/gcname/nickname,
+    // which are dual-mode). Callers throughout this codebase (fcaHelpers,
+    // management/control/addmember plugins) still call
+    // api.getThreadInfo(threadID, (err, info) => {...}) expecting old
+    // callback-style FCA. Since the real function ignores the 2nd arg
+    // entirely, that callback is NEVER invoked — resolve/reject never fires,
+    // and the caller hangs forever (e.g. /اسم, /كنية never respond, with no
+    // error logged). Wrap it once here so every caller keeps working.
+    const _rawGetThreadInfo = api.getThreadInfo.bind(api);
+    api.getThreadInfo = (threadID, callback) => {
+      if (typeof callback === "function") {
+        _rawGetThreadInfo(threadID).then(
+          (info) => callback(null, info),
+          (err) => callback(err instanceof Error ? err : new Error(String(err))),
+        );
+        return undefined;
+      }
+      return _rawGetThreadInfo(threadID);
+    };
+
     // Human send
     api.sendMessageHuman = async (msg, tid, cb) => {
       const delay = calcTypingDelay(typeof msg === "string" ? msg : msg?.body || "");
