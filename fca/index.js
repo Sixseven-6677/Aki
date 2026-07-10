@@ -233,6 +233,30 @@ function login(cookieInput, opts, callback) {
       api.listen = (callback) => api.listenMqtt(callback);
     }
 
+    // ── sendMessage callback-compatibility shim ───────────────────────────────
+    // ws3-fca 3.5.x's real sendMessage is Promise-based only:
+    //   sendMessage(msg, threadID, replyToMessage?, isSingleUser?) -> Promise<info>
+    // It does NOT accept a callback in the 3rd position. Callers throughout this
+    // codebase (AkiSender, buildReplyHelper, sendMessageHuman below) still call
+    // api.sendMessage(msg, threadID, callback) expecting old callback-style FCA.
+    // Passing a function where ws3-fca expects `replyToMessage` (a string) makes
+    // it throw "MessageID should be of type string and not Function." as an
+    // uncaught exception, crashing the whole process on every reply. Wrap the
+    // raw promise-based function once here so every caller keeps working.
+    const _rawSendMessage = api.sendMessage.bind(api);
+    api.sendMessage = (msg, threadID, callback, replyToMessage, isSingleUser) => {
+      if (typeof callback === "function") {
+        _rawSendMessage(msg, threadID, replyToMessage, isSingleUser).then(
+          (info) => callback(null, info),
+          (err) => callback(err instanceof Error ? err : new Error(String(err))),
+        );
+        return undefined;
+      }
+      // No callback passed — caller wants the promise directly (replyToMessage,
+      // if any, would have been passed positionally as the 3rd arg already).
+      return _rawSendMessage(msg, threadID, callback, replyToMessage);
+    };
+
     // Human send
     api.sendMessageHuman = async (msg, tid, cb) => {
       const delay = calcTypingDelay(typeof msg === "string" ? msg : msg?.body || "");
