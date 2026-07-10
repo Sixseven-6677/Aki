@@ -155,7 +155,8 @@ async function simulateTyping(api, threadID, ms) {
   const delay = ms ?? 1500;
   try {
     if (typeof api?.sendTypingIndicator === "function") {
-      const stop = api.sendTypingIndicator(threadID, () => {});
+      // ws3-fca signature: sendTypingIndicator(isTyping, threadID, callback?)
+      const stop = api.sendTypingIndicator(true, threadID, () => {});
       await new Promise(r => setTimeout(r, delay));
       if (typeof stop === "function") stop();
     } else {
