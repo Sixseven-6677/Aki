@@ -20,7 +20,7 @@
  */
 "use strict";
 
-const loginFCA = require("ws3-fca");
+const loginFCA = require("ws3-fca").login; // ws3-fca exports { login }, not a default function
 const axios    = require("axios");
 
 // ─── User-Agent Pool ──────────────────────────────────────────────────────────
