@@ -64,17 +64,12 @@ export class AkiSender implements ISender {
       }
 
       try {
-        await withTimeout(
-          new Promise<void>((resolve, reject) => {
-            api!.sendMessage(text, recipientId, (err, info) => {
-              if (err) { reject(err); return; }
-              log.info("AkiSender: message sent.", { to: recipientId, messageID: info?.messageID });
-              resolve();
-            });
-          }),
+        const info = await withTimeout(
+          Promise.resolve(api!.sendMessage(text, recipientId)) as Promise<{ messageID?: string } | void>,
           SEND_TIMEOUT_MS,
           `sendMessage to ${recipientId}`,
         );
+        log.info("AkiSender: message sent.", { to: recipientId, messageID: (info as { messageID?: string } | void)?.messageID });
         return;
       } catch (err) {
         lastErr = err;
@@ -96,28 +91,24 @@ export class AkiSender implements ISender {
     const api = this.provider.getApi();
     if (!api) return;
 
-    const indicatorPromise = new Promise<void>((resolve) => {
-      try {
-        api.sendTypingIndicator(recipientId, (err?: Error) => {
-          if (err) log.warn("AkiSender.sendTyping: failed.", { error: err.message });
-          resolve();
-        });
-      } catch (e) {
-        log.warn("AkiSender.sendTyping: threw.", { error: String(e) });
-        resolve();
-      }
-    });
-
     try {
-      await withTimeout(indicatorPromise, 3_000, `sendTypingIndicator to ${recipientId}`);
-    } catch {
-      log.warn("AkiSender.sendTyping: timed out — continuing.");
+      await withTimeout(
+        Promise.resolve(api.sendTypingIndicator(true, recipientId)),
+        3_000,
+        `sendTypingIndicator to ${recipientId}`,
+      );
+    } catch (e) {
+      log.warn("AkiSender.sendTyping: failed or timed out — continuing.", { error: String(e) });
     }
   }
 
   async sendReaction(messageId: string, _recipientId: string, emoji: string): Promise<void> {
     const api = this.provider.getApi();
     if (!api) return;
-    try { api.setMessageReaction(emoji, messageId, undefined, true); } catch { /**/ }
+    try {
+      await Promise.resolve(api.setMessageReaction(emoji, messageId));
+    } catch (e) {
+      log.warn("AkiSender.sendReaction: failed.", { error: String(e) });
+    }
   }
 }
